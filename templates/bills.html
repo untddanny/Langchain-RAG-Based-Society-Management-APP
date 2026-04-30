@@ -1,23 +1,21 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Pay Bills</title>
+<h2>Members Bills</h2>
 
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<table border="1">
+<tr>
+    <th>Name</th>
+    <th>Flat</th>
+    <th>Total</th>
+    <th>Balance</th>
+</tr>
 
-    <style>
-        body {
-            background: linear-gradient(to right, #4facfe, #00f2fe);
-            height: 100vh;
-        }
-        .card {
-            border-radius: 15px;
-        }
-    </style>
-</head>
-<body>
-    <h2>Pay Bills Page (Coming Soon)</h2>
-    <a href="/dashboard">Back</a>
-</body>
-</html>
+{% for member in members %}
+<tr>
+    <td>{{ member.name }}</td>
+    <td>{{ member.flat_number }}</td>
+    <td>{{ member.bills[0].total_amount }}</td>
+    <td>{{ member.bills[0].balance_amount }}</td>
+</tr>
+{% endfor %}
+</table>
+
+<a href="/dashboard">Back</a>

@@ -3,7 +3,6 @@
 <head>
     <title>Login</title>
 
-    <!-- Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
@@ -17,13 +16,17 @@
         }
     </style>
 </head>
+
 <body>
 
-<div class="container d-flex justify-content-center align-items-center" style="height:100vh;">
+<div class="container d-flex flex-column justify-content-center align-items-center" style="height:100vh;">
     
+    <!-- Heading -->
+    <h1 class="text-white mb-4">Society Management System</h1>
+
     <div class="card login-card shadow" style="width: 350px;">
         
-        <h3 class="text-center mb-4">Login</h3>
+        <h4 class="text-center mb-3">Login</h4>
 
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
@@ -39,10 +42,6 @@
                 <input type="password" class="form-control" name="password" placeholder="Password" required>
             </div>
 
-            <input type="checkbox" onclick="togglePassword()"> Show Password
-
-            <br><br>
-
             <button type="submit" class="btn btn-primary w-100">Login</button>
         </form>
 
@@ -50,23 +49,12 @@
 
         <small class="text-muted text-center d-block">
             Admin: admin / admin123 <br>
-            User: user / user123
+            Member: member / member123
         </small>
 
     </div>
 
 </div>
-
-<script>
-function togglePassword() {
-    var x = document.querySelector('input[name="password"]');
-    if (x.type === "password") {
-        x.type = "text";
-    } else {
-        x.type = "password";
-    }
-}
-</script>
 
 </body>
 </html>

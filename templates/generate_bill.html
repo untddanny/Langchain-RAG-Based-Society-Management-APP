@@ -1,0 +1,24 @@
+<h2>Generate Monthly Bill</h2>
+
+<form method="POST">
+
+    <label>Member:</label>
+    <select name="member_id">
+        {% for m in members %}
+            <option value="{{ m.id }}">{{ m.name }} ({{ m.flat_number }})</option>
+        {% endfor %}
+    </select>
+    <br><br>
+
+    Month: <input type="text" name="month"><br><br>
+    Year: <input type="number" name="year"><br><br>
+
+    Parking: <input type="number" name="parking"><br><br>
+    Water: <input type="number" name="water"><br><br>
+    Electricity: <input type="number" name="electricity"><br><br>
+    Security: <input type="number" name="security"><br><br>
+
+    <button type="submit">Generate Bill</button>
+</form>
+
+<a href="/dashboard">Back</a>
