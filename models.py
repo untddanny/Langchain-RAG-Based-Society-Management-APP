@@ -30,3 +30,11 @@ class Bill(db.Model):
     balance_amount = db.Column(db.Float)
 
     status = db.Column(db.String(20), default="unpaid")
+
+
+class Document(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    upload_date = db.Column(db.DateTime, default=db.func.now())
+    uploaded_by = db.Column(db.String(100))  # Admin name    

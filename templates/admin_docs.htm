@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>📄 Upload Society Rules</h2>
+    
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    
+    {% if success %}
+    <div class="alert alert-success">{{ success }}</div>
+    {% endif %}
+    
+    <form method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label>Select Document (PDF, TXT, DOCX):</label>
+            <input type="file" name="file" required accept=".pdf,.txt,.docx">
+        </div>
+        <button type="submit" class="btn btn-primary">Upload & Index</button>
+    </form>
+    
+    <h3>Uploaded Documents:</h3>
+    <ul>
+        {% for doc in documents %}
+        <li>{{ doc.filename }} - Uploaded {{ doc.upload_date }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

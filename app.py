@@ -144,5 +144,58 @@ def generate_bill():
     members = Member.query.all()
     return render_template("generate_bill.html", members=members)
 
+from werkzeug.utils import secure_filename
+from rag_system import load_and_index_document, query_rules
+from models import Document
+import os
+
+UPLOAD_FOLDER = "uploads"
+ALLOWED_EXTENSIONS = {'pdf', 'txt', 'docx'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route("/admin-docs", methods=["GET", "POST"])
+def admin_docs():
+    if request.method == "POST":
+        # Check if file in request
+        if 'file' not in request.files:
+            return render_template("admin_docs.html", error="No file selected")
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return render_template("admin_docs.html", error="No file selected")
+        
+        if not allowed_file(file.filename):
+            return render_template("admin_docs.html", error="Only PDF, TXT, DOCX allowed")
+        
+        # Save file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+        
+        # Index with RAG
+        try:
+            load_and_index_document(filepath)
+            
+            # Save to database
+            doc = Document(
+                filename=filename,
+                file_path=filepath,
+                uploaded_by="admin"
+            )
+            db.session.add(doc)
+            db.session.commit()
+            
+            return render_template("admin_docs.html", 
+                                 success=f"✅ Document '{filename}' uploaded and indexed!")
+        except Exception as e:
+            return render_template("admin_docs.html", error=f"Error: {str(e)}")
+    
+    # GET request - show upload page
+    docs = Document.query.all()
+    return render_template("admin_docs.html", documents=docs)
+
 if __name__ == "__main__":
     app.run(debug=True, port=5050)
