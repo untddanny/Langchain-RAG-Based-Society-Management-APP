@@ -1,19 +1,22 @@
 <h2>Members Bills</h2>
 
 <table border="1">
+    <h3>{{ members.name }} ({{ members.flat_number }})</h3>
 <tr>
-    <th>Name</th>
-    <th>Flat</th>
+    
+    <th>Month</th>
+    <th>Year</th>
     <th>Total</th>
     <th>Balance</th>
 </tr>
 
-{% for member in members %}
+{% for bill in bills %}
 <tr>
-    <td>{{ member.name }}</td>
-    <td>{{ member.flat_number }}</td>
-    <td>{{ member.bills[0].total_amount }}</td>
-    <td>{{ member.bills[0].balance_amount }}</td>
+    
+    <td>{{ bill.month }}</td>
+    <td>{{ bill.year }}</td>
+    <td>{{ bill.total_amount }}</td>
+    <td>{{ bill.balance_amount }}</td>
 </tr>
 {% endfor %}
 </table>

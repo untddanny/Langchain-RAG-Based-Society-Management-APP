@@ -51,8 +51,9 @@ def dashboard():
 # ---------- MEMBER ROUTES ----------
 @app.route("/bills")
 def bills():
-    members = Member.query.all()
-    return render_template("bills.html", members=members)
+    members = Member.query.get(session["member_id"])
+    bills = Bill.query.filter_by(member_id=session["member_id"]).all()
+    return render_template("bills.html", members=members, bills=bills)
 
 @app.route("/complaints")
 def complaints():
@@ -113,8 +114,9 @@ def add_member():
 def generate_bill():
     if request.method == "POST":
         member_id = request.form["member_id"]
-        month = request.form["month"]
-        year = int(request.form["year"])
+        billing_month = request.form["billing_month"]
+        # Split into month + year
+        year, month = billing_month.split("-")
 
         parking = float(request.form["parking"])
         water = float(request.form["water"])
