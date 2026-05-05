@@ -7,6 +7,8 @@ app.secret_key = "secretkey"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///society.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+app.permanent_session_lifetime=15 
+
 db.init_app(app)
 with app.app_context():
     db.create_all()
