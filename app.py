@@ -60,6 +60,8 @@ def complaints():
 
 @app.route("/chatbot")
 def chatbot():
+    if "user" not in session or session["user"] != "member":
+        return redirect(url_for("login"))
     return render_template("chatbot.html")
 
 
@@ -148,15 +150,18 @@ from werkzeug.utils import secure_filename
 from rag_system import load_and_index_document, query_rules
 from models import Document
 import os
+from flask import jsonify
 
 UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {'pdf', 'txt', 'docx'}
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route("/admin-docs", methods=["GET", "POST"])
-def admin_docs():
+def admin_docs_updated():
     if request.method == "POST":
         # Check if file in request
         if 'file' not in request.files:
@@ -196,6 +201,28 @@ def admin_docs():
     # GET request - show upload page
     docs = Document.query.all()
     return render_template("admin_docs.html", documents=docs)
+
+@app.route("/api/chat", methods=["POST"])
+def chat_api():
+    """
+    API endpoint for chatbot
+    Receives: {"question": "What are the parking rules?"}
+    Returns: {"answer": "..."}
+    """
+    if "user" not in session or session["user"] != "member":
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.json
+    question = data.get("question", "").strip()
+    
+    if not question:
+        return jsonify({"error": "No question provided"}), 400
+    
+    try:
+        answer = query_rules(question)
+        return jsonify({"answer": answer})
+    except Exception as e:
+        return jsonify({"error": f"Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, port=5050)
