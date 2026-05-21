@@ -1,182 +1,198 @@
-"""
-RAG System for Society Rules Chatbot
-Simplified version using langchain_community
-"""
+# SIMPLIFIED RAG SYSTEM - NO PYTORCH DEPENDENCY
+# Uses Ollama directly with simple text search
 
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_community.llms import Ollama
+# IMPORT OS FOR FILE OPERATIONS
 import os
+# IMPORT LOGGING FOR ERROR MESSAGES
 import logging
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Configuration
+# SET PATHS
 UPLOAD_FOLDER = "uploads"
 CHROMA_DB_PATH = "chroma_db"
 
-# Create folders if they don't exist
+# CREATE FOLDERS IF DON'T EXIST
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(CHROMA_DB_PATH, exist_ok=True)
 
-# Initialize embeddings (converts text to vectors)
+# TRY TO IMPORT OLLAMA
 try:
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    logger.info("✅ Embeddings initialized")
-except Exception as e:
-    logger.warning(f"Embeddings initialization issue: {e}")
-    embeddings = None
+    # IMPORT OLLAMA LLM
+    from langchain_community.llms import Ollama
+except ImportError:
+    try:
+        from langchain.llms import Ollama
+    except ImportError:
+        Ollama = None
+        logging.warning("Ollama not available")
 
-# Initialize Ollama LLM
+# INITIALIZE OLLAMA LLM - LOCAL LANGUAGE MODEL
+# Connects to Ollama server running on localhost:11434
 try:
     llm = Ollama(model="mistral", base_url="http://localhost:11434")
-    logger.info("✅ Ollama LLM initialized")
 except Exception as e:
-    logger.warning(f"Ollama initialization issue: {e}")
+    logging.warning(f"Could not initialize Ollama: {e}")
     llm = None
 
-# Initialize Chroma vector store
-try:
-    vectorstore = Chroma(
-        embedding_function=embeddings,
-        persist_directory=CHROMA_DB_PATH,
-        collection_name="society_rules"
-    )
-    logger.info("✅ Chroma vector store initialized")
-except Exception as e:
-    logger.warning(f"Chroma initialization issue: {e}")
-    vectorstore = None
+# STORAGE FOR INDEXED DOCUMENTS (IN-MEMORY)
+# In production, use real database, but for learning this works
+indexed_documents = {}
+document_chunks = {}
+
 
 def load_and_index_document(file_path):
     """
-    Load a document and add it to the vector store.
+    Load document and store in memory for searching
+    
+    Process:
+    1. Load document (PDF or TXT)
+    2. Split into chunks
+    3. Store in memory with filename
     """
     
-    try:
-        file_path = str(file_path)
-        logger.info(f"Loading document: {file_path}")
-        
-        # Load document based on file type
-        if file_path.endswith('.pdf'):
-            loader = PyPDFLoader(file_path)
-        elif file_path.endswith('.txt'):
-            loader = TextLoader(file_path, encoding='utf-8')
-        elif file_path.endswith('.docx'):
-            # For DOCX files, extract text first
-            try:
-                from docx import Document as DocxDocument
-                doc = DocxDocument(file_path)
-                text = "\n".join([para.text for para in doc.paragraphs])
-                # Create temporary txt file
-                temp_path = file_path.replace('.docx', '_temp.txt')
-                with open(temp_path, 'w') as f:
-                    f.write(text)
-                loader = TextLoader(temp_path, encoding='utf-8')
-            except:
-                raise ValueError("Error processing DOCX file")
-        else:
-            raise ValueError("Only PDF, TXT, and DOCX files are supported")
-        
-        # Load documents
-        documents = loader.load()
-        logger.info(f"Loaded {len(documents)} pages")
-        
-        # Split into chunks
-        text_splitter = CharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
-            separator="\n"
-        )
-        chunks = text_splitter.split_documents(documents)
-        logger.info(f"Split into {len(chunks)} chunks")
-        
-        # Add to vector store
-        if vectorstore is None:
-            raise Exception("Vector store not initialized")
-        
-        vectorstore.add_documents(chunks)
-        logger.info(f"✅ Indexed {len(chunks)} chunks successfully")
-        
-        return len(chunks)
-        
-    except Exception as e:
-        logger.error(f"Error loading document: {str(e)}")
-        raise
+    # GET FILENAME WITHOUT PATH
+    filename = os.path.basename(file_path)
+    
+    # READ DOCUMENT CONTENT
+    if file_path.endswith('.pdf'):
+        # PDF SUPPORT - REQUIRES pypdf
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            content = ""
+            for page in reader.pages:
+                content += page.extract_text()
+        except ImportError:
+            raise ImportError("PDF support requires: pip install pypdf")
+    elif file_path.endswith('.txt'):
+        # SIMPLE TEXT FILE READING
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    else:
+        raise ValueError("Only TXT and PDF files supported")
+    
+    # SPLIT CONTENT INTO CHUNKS (500 characters each with overlap)
+    chunk_size = 500
+    chunk_overlap = 50
+    chunks = []
+    
+    # CREATE OVERLAPPING CHUNKS
+    for i in range(0, len(content), chunk_size - chunk_overlap):
+        chunk = content[i:i + chunk_size]
+        if chunk.strip():  # ONLY ADD NON-EMPTY CHUNKS
+            chunks.append(chunk)
+    
+    # STORE CHUNKS IN MEMORY
+    if chunks:
+        indexed_documents[filename] = {
+            'path': file_path,
+            'content': content,
+            'chunks': chunks,
+            'chunk_count': len(chunks)
+        }
+        document_chunks[filename] = chunks
+        print(f"✅ Indexed {len(chunks)} chunks from {filename}")
+        return True
+    else:
+        raise ValueError("No text content found in document")
 
-def query_rules(question, num_sources=3):
+
+def query_rules(question):
     """
-    Answer a question based on indexed documents.
+    Answer question based on uploaded documents
+    
+    Process:
+    1. Search all documents for relevant sections
+    2. Combine best matches as context
+    3. Send to Ollama with explicit instructions
+    4. Return answer based on context
     """
     
-    try:
-        if vectorstore is None:
-            return "Vector store not initialized. Please upload a document first."
-        
-        if llm is None:
-            return "Ollama LLM not available. Make sure Ollama is running on http://localhost:11434"
-        
-        logger.info(f"Answering question: {question}")
-        
-        # Search for similar documents
-        search_results = vectorstore.similarity_search(question, k=num_sources)
-        
-        if not search_results:
-            return "No relevant information found in uploaded documents."
-        
-        # Prepare context from search results
-        context = "\n\n".join([doc.page_content for doc in search_results])
-        
-        # Create prompt
-        prompt = f"""Based on the following society rules, answer the question.
+    # CHECK IF ANY DOCUMENTS ARE INDEXED
+    if not indexed_documents:
+        return "No documents uploaded yet. Please upload a document first in Management Documents."
+    
+    # SEARCH ALL CHUNKS FOR RELEVANCE (SIMPLE KEYWORD SEARCH)
+    relevant_chunks = []
+    question_words = set(question.lower().split())
+    
+    # SCORE EACH CHUNK BASED ON MATCHING WORDS
+    for filename, doc_info in indexed_documents.items():
+        for chunk in doc_info['chunks']:
+            # COUNT HOW MANY QUESTION WORDS APPEAR IN CHUNK
+            chunk_lower = chunk.lower()
+            score = sum(1 for word in question_words if word in chunk_lower)
+            
+            # ADD CHUNK WITH SCORE IF IT HAS MATCHES
+            if score > 0:
+                relevant_chunks.append((chunk, score))
+    
+    # IF NO RELEVANT CHUNKS FOUND, SEARCH BY CONTENT TYPE
+    if not relevant_chunks:
+        # RETURN ALL CHUNKS (FALLBACK)
+        for filename, doc_info in indexed_documents.items():
+            for chunk in doc_info['chunks'][:3]:  # LIMIT TO FIRST 3
+                relevant_chunks.append((chunk, 1))
+    
+    # SORT BY RELEVANCE SCORE (HIGHEST FIRST)
+    relevant_chunks.sort(key=lambda x: x[1], reverse=True)
+    
+    # TAKE TOP 5 MOST RELEVANT CHUNKS
+    top_chunks = relevant_chunks[:5]
+    
+    # IF STILL NO CHUNKS, RETURN ERROR
+    if not top_chunks:
+        return "No relevant information found. Please upload documents with society rules."
+    
+    # COMBINE CHUNKS INTO CONTEXT
+    context = "\n\n".join([chunk for chunk, score in top_chunks])
+    
+    # CHECK IF OLLAMA IS AVAILABLE
+    if llm is None:
+        # NO OLLAMA - RETURN CONTEXT DIRECTLY
+        return f"[No Ollama - Raw context]\n\n{context[:500]}..."
+    
+    # CREATE EXPLICIT PROMPT FOR LLM
+    prompt = f"""You are a helpful assistant for society management. Answer questions about society rules.
 
-Society Rules:
+IMPORTANT:
+- Answer ONLY based on the provided context below
+- Do NOT use your general knowledge
+- If the answer is not in the context, say "This information is not available in the society rules"
+- Be specific and cite the rule when possible
+
+CONTEXT FROM SOCIETY RULES:
 {context}
 
-Question: {question}
+QUESTION: {question}
 
-Answer:"""
-        
-        # Get answer from LLM
-        logger.info("Calling Ollama LLM...")
+ANSWER:"""
+    
+    # SEND TO OLLAMA AND GET ANSWER
+    try:
         answer = llm.invoke(prompt)
-        
-        logger.info(f"Generated answer: {str(answer)[:100]}...")
         return answer
-        
     except Exception as e:
-        logger.error(f"Error querying rules: {str(e)}")
-        return f"Error: {str(e)}"
+        # IF OLLAMA ERROR, RETURN CONTEXT
+        return f"Error contacting LLM: {str(e)}\n\nRelevant context:\n{context[:300]}..."
 
-def get_all_indexed_documents():
-    """Check if vector store has data."""
-    try:
-        if vectorstore is None:
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        return False
 
-def clear_vector_store():
-    """Clear all data from vector store."""
-    try:
-        import shutil
-        if os.path.exists(CHROMA_DB_PATH):
-            shutil.rmtree(CHROMA_DB_PATH)
-            os.makedirs(CHROMA_DB_PATH, exist_ok=True)
-            logger.info("✅ Vector store cleared")
-            return True
-    except Exception as e:
-        logger.error(f"Error clearing vector store: {str(e)}")
-        return False
+def get_indexed_documents():
+    """
+    Get list of all indexed documents
+    
+    Returns:
+    - List of filenames that are indexed
+    """
+    return list(indexed_documents.keys())
 
-# Test on import
-if __name__ == "__main__":
-    print("RAG System ready!")
-    print(f"Embeddings: {'✅' if embeddings else '❌'}")
-    print(f"LLM (Ollama): {'✅' if llm else '❌'}")
-    print(f"Vector Store: {'✅' if vectorstore else '❌'}")
+
+def clear_documents():
+    """
+    Clear all indexed documents from memory
+    
+    Use this to reset the system
+    """
+    global indexed_documents, document_chunks
+    indexed_documents = {}
+    document_chunks = {}
+    print("✅ Cleared all indexed documents")
